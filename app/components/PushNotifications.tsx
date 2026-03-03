@@ -57,13 +57,17 @@ export default function PushNotifications() {
 
   const subscribe = useCallback(async () => {
     try {
+      console.log("[Push] Requesting notification permission...");
       const perm = await Notification.requestPermission();
+      console.log("[Push] Permission result:", perm);
       setPermission(perm as PermissionState);
       setShowBanner(false);
 
       if (perm !== "granted") return;
 
+      console.log("[Push] Waiting for service worker...");
       const reg = await navigator.serviceWorker.ready;
+      console.log("[Push] Service worker ready. Subscribing to push...");
       const applicationServerKey = urlBase64ToUint8Array(
         process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
       );
@@ -72,15 +76,29 @@ export default function PushNotifications() {
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
       });
+      console.log("[Push] Subscribed! Sending to server...");
 
       // Send subscription to our API
-      await fetch("/api/push/subscribe", {
+      const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sub.toJSON()),
       });
+      const data = await res.json();
+      console.log("[Push] Server response:", data);
 
       setIsSubscribed(true);
+
+      // Send a test notification to confirm it works
+      await fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Organaiz",
+          body: "Notifications are now enabled!",
+          url: "/",
+        }),
+      });
     } catch (err) {
       console.error("Push subscription failed:", err);
     }
