@@ -48,6 +48,36 @@ self.addEventListener("push", (event) => {
     data = { title: "Organaiz", body: event.data.text() };
   }
 
+  // Call-type notification: aggressive vibrate, sticky, opens call screen
+  if (data.type === "call") {
+    const options = {
+      body: data.body || "Incoming call...",
+      icon: data.icon || "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: data.url || "/call", type: "call" },
+      vibrate: [
+        800, 200, 800, 200, 800, 200,
+        800, 200, 800, 200, 800, 200,
+        800, 200, 800, 200, 800, 200,
+        800, 200, 800, 200, 800, 200,
+      ],
+      tag: "organaiz-call",
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
+      actions: [
+        { action: "accept", title: "Accept" },
+        { action: "decline", title: "Decline" },
+      ],
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title || "Incoming Call", options)
+    );
+    return;
+  }
+
+  // Normal notification
   const options = {
     body: data.body || "",
     icon: data.icon || "/icon-192.png",
@@ -66,7 +96,19 @@ self.addEventListener("push", (event) => {
 // Notification click: open/focus the app
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/";
+
+  const data = event.notification.data || {};
+  let targetUrl = data.url || "/";
+
+  // Handle call notification actions
+  if (data.type === "call") {
+    if (event.action === "decline") {
+      // Just close, don't open anything
+      return;
+    }
+    // "accept" action or body tap — open call screen
+    targetUrl = data.url || "/call";
+  }
 
   event.waitUntil(
     self.clients
