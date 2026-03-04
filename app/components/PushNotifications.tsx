@@ -66,11 +66,26 @@ export default function PushNotifications() {
       }
     });
 
+    // Listen for incoming-call messages from the service worker
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data?.type === "incoming-call") {
+        console.log("[Push] Incoming call from SW:", event.data);
+        const url = event.data.url || "/call?caller=" + encodeURIComponent(event.data.caller || "Unknown");
+        window.location.href = url;
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handleSWMessage);
+
     // Show auto-prompt banner after 3s if not yet decided
+    let bannerTimer: ReturnType<typeof setTimeout> | undefined;
     if (perm === "prompt") {
-      const timer = setTimeout(() => setShowBanner(true), 3000);
-      return () => clearTimeout(timer);
+      bannerTimer = setTimeout(() => setShowBanner(true), 3000);
     }
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handleSWMessage);
+      if (bannerTimer) clearTimeout(bannerTimer);
+    };
   }, []);
 
   const subscribe = useCallback(async () => {

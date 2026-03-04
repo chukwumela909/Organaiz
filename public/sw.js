@@ -48,23 +48,20 @@ self.addEventListener("push", (event) => {
     data = { title: "Organaiz", body: event.data.text() };
   }
 
-  // Call-type notification: aggressive vibrate, sticky, opens call screen
+  // Call-type notification: silent notification + auto-open call screen for real ringtone
   if (data.type === "call") {
+    const caller = data.caller || "Unknown";
+    const callUrl = data.url || "/call?caller=" + encodeURIComponent(caller);
+
     const options = {
       body: data.body || "Incoming call...",
       icon: data.icon || "/icon-192.png",
       badge: "/icon-192.png",
-      data: { url: data.url || "/call", type: "call" },
-      vibrate: [
-        800, 200, 800, 200, 800, 200,
-        800, 200, 800, 200, 800, 200,
-        800, 200, 800, 200, 800, 200,
-        800, 200, 800, 200, 800, 200,
-      ],
+      data: { url: callUrl, type: "call", caller: caller },
       tag: "organaiz-call",
       renotify: true,
       requireInteraction: true,
-      silent: false,
+      silent: true, // suppress system chime — the call page plays the real ringtone
       actions: [
         { action: "accept", title: "Accept" },
         { action: "decline", title: "Decline" },
@@ -73,6 +70,25 @@ self.addEventListener("push", (event) => {
 
     event.waitUntil(
       self.registration.showNotification(data.title || "Incoming Call", options)
+        .then(() => {
+          // Try to open the call screen immediately so the ringtone plays
+          return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        })
+        .then((clientList) => {
+          // If an app tab is already open, message it to navigate to the call screen
+          for (const client of clientList) {
+            if (client.url.includes(self.registration.scope)) {
+              client.postMessage({
+                type: "incoming-call",
+                caller: caller,
+                url: callUrl,
+              });
+              return; // messaged an open tab — it will navigate
+            }
+          }
+          // No open tab — auto-open the call screen (Chromium allows this from push handlers)
+          return self.clients.openWindow(callUrl);
+        })
     );
     return;
   }
