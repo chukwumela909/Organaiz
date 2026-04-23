@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import PushNotifications from "./components/PushNotifications";
 import RegisterSW from "./components/RegisterSW";
 
 const geistSans = Geist({
@@ -43,7 +42,6 @@ export default function RootLayout({
       >
         {children}
         <RegisterSW />
-        <PushNotifications />
       </body>
     </html>
   );

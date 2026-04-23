@@ -1,63 +1,176 @@
+"use client";
+
+import { useState, useRef, useEffect, useCallback } from "react";
+import ChatHeader from "@/app/components/ChatHeader";
+import ChatMessage from "@/app/components/ChatMessage";
+import ChatInput from "@/app/components/ChatInput";
+import TaskCard from "@/app/components/TaskCard";
+import IdeaCard from "@/app/components/IdeaCard";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  tasks?: TaskData[];
+  ideas?: IdeaData[];
+}
+
+interface TaskData {
+  _id: string;
+  title: string;
+  status: string;
+  priority: string;
+  deadline?: string;
+  tags?: string[];
+}
+
+interface IdeaData {
+  _id: string;
+  content: string;
+  tags?: string[];
+  category?: string;
+  status: string;
+}
+
+const GREETING = "What do you want? I'm your AI life organizer — tasks, goals, ideas, whatever. Talk to me or keep scrolling through your phone. Your call.";
+
 export default function Home() {
+  const [messages, setMessages] = useState<Message[]>([
+    { role: "assistant", content: GREETING },
+  ]);
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading, scrollToBottom]);
+
+  const handleTaskStatusChange = useCallback((taskId: string, newStatus: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => ({
+        ...msg,
+        tasks: msg.tasks?.map((t) =>
+          t._id === taskId ? { ...t, status: newStatus } : t
+        ),
+      }))
+    );
+  }, []);
+
+  const handleIdeaStatusChange = useCallback((ideaId: string, newStatus: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => ({
+        ...msg,
+        ideas: msg.ideas?.map((i) =>
+          i._id === ideaId ? { ...i, status: newStatus } : i
+        ),
+      }))
+    );
+  }, []);
+
+  const handleSend = useCallback(async (content: string) => {
+    const userMsg: Message = { role: "user", content };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: updated.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Something broke." }));
+        setMessages((prev) => [...prev, { role: "assistant", content: err.error || "Something broke. Try again." }]);
+        return;
+      }
+
+      const data = await res.json();
+
+      // Extract tasks and ideas from actions
+      const tasks: TaskData[] = [];
+      const ideas: IdeaData[] = [];
+      for (const action of data.actions || []) {
+        if (action.task) tasks.push(action.task as TaskData);
+        if (action.tasks) tasks.push(...(action.tasks as TaskData[]));
+        if (action.item) tasks.push(action.item as TaskData); // items render as task cards
+        if (action.idea) ideas.push(action.idea as IdeaData);
+        if (action.ideas) ideas.push(...(action.ideas as IdeaData[]));
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.reply,
+          tasks: tasks.length > 0 ? tasks : undefined,
+          ideas: ideas.length > 0 ? ideas : undefined,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: "Network error. Check your connection and try again." }]);
+    } finally {
+      setLoading(false);
+    }
+  }, [messages]);
+
+  const handleNewChat = useCallback(() => {
+    setMessages([{ role: "assistant", content: GREETING }]);
+  }, []);
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-black relative overflow-hidden">
-      {/* Ambient glow behind the bot */}
-      <div className="absolute w-64 h-64 rounded-full bg-cyan-500/20 blur-[100px] animate-pulse" />
+    <div className="flex h-dvh flex-col bg-white dark:bg-zinc-950">
+      <ChatHeader onNewChat={handleNewChat} />
 
-      {/* Bot head */}
-      <div className="relative z-10 animate-float">
-        <svg
-          width="160"
-          height="160"
-          viewBox="0 0 160 160"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Antenna */}
-          <line x1="80" y1="12" x2="80" y2="32" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" />
-          <circle cx="80" cy="8" r="5" fill="#22d3ee" className="animate-ping-slow" />
-
-          {/* Head shape */}
-          <rect x="28" y="32" width="104" height="96" rx="28" fill="#18181b" stroke="#22d3ee" strokeWidth="2.5" />
-
-          {/* Visor / eye band */}
-          <rect x="42" y="58" width="76" height="28" rx="14" fill="#0e7490" opacity="0.35" />
-
-          {/* Left eye */}
-          <circle cx="60" cy="72" r="10" fill="#22d3ee">
-            <animate attributeName="r" values="10;8;10" dur="2.5s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="60" cy="72" r="4" fill="#000" />
-
-          {/* Right eye */}
-          <circle cx="100" cy="72" r="10" fill="#22d3ee">
-            <animate attributeName="r" values="10;8;10" dur="2.5s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="100" cy="72" r="4" fill="#000" />
-
-          {/* Mouth */}
-          <rect x="62" y="100" width="36" height="6" rx="3" fill="#22d3ee" opacity="0.7" />
-
-          {/* Ear bolts */}
-          <circle cx="24" cy="76" r="7" fill="#18181b" stroke="#22d3ee" strokeWidth="2" />
-          <circle cx="136" cy="76" r="7" fill="#18181b" stroke="#22d3ee" strokeWidth="2" />
-        </svg>
+      {/* Messages area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+        {messages.map((msg, i) => (
+          <div key={i}>
+            <ChatMessage role={msg.role} content={msg.content} />
+            {msg.tasks && msg.tasks.length > 0 && (
+              <div className="mb-3 ml-0 max-w-[85%]">
+                {msg.tasks.map((task) => (
+                  <TaskCard
+                    key={task._id}
+                    task={task}
+                    onStatusChange={handleTaskStatusChange}
+                  />
+                ))}
+              </div>
+            )}
+            {msg.ideas && msg.ideas.length > 0 && (
+              <div className="mb-3 ml-0 max-w-[85%]">
+                {msg.ideas.map((idea) => (
+                  <IdeaCard
+                    key={idea._id}
+                    idea={idea}
+                    onStatusChange={handleIdeaStatusChange}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start mb-3">
+            <div className="flex gap-1.5 rounded-2xl bg-zinc-200 px-4 py-3 dark:bg-zinc-800">
+              <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-500" style={{ animationDelay: "0ms" }} />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-500" style={{ animationDelay: "150ms" }} />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-500" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* App name */}
-      <h1 className="relative z-10 mt-8 text-4xl font-bold tracking-widest text-white animate-fade-in">
-        ORGANAIZ
-      </h1>
-      <p className="relative z-10 mt-3 text-sm tracking-wider text-cyan-400/70 animate-fade-in-delayed">
-        Stay organized. Stay ahead.
-      </p>
-
-      {/* Loading dots */}
-      <div className="relative z-10 mt-10 flex gap-2">
-        <span className="h-2 w-2 rounded-full bg-cyan-400 animate-bounce [animation-delay:0ms]" />
-        <span className="h-2 w-2 rounded-full bg-cyan-400 animate-bounce [animation-delay:150ms]" />
-        <span className="h-2 w-2 rounded-full bg-cyan-400 animate-bounce [animation-delay:300ms]" />
-      </div>
+      <ChatInput onSend={handleSend} disabled={loading} />
     </div>
   );
 }
